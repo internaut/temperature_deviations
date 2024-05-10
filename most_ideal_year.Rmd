@@ -1,0 +1,64 @@
+---
+title: "The most ideal year"
+author: "Markus Konrad"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+
+theme_set(theme_minimal())
+```
+
+
+## Data
+
+source: https://www.dwd.de/DE/leistungen/klimadatendeutschland/klarchivtagmonat.html
+
+```{r}
+raw_hist <- read.delim('data/produkt_klima_tag_19500101_20221231_00403.txt', sep = ';')
+head(raw_hist)
+```
+
+```{r}
+raw_pres <- read.delim('data/produkt_klima_tag_20221107_20240509_00403.txt', sep = ';')
+head(raw_pres)
+```
+
+
+```{r}
+meas <- bind_rows(raw_hist, raw_pres) |>
+    select(date = MESS_DATUM, temp = TMK) |>
+    mutate(date = as.POSIXct(strptime(date, "%Y%m%d")),
+           year = as.integer(as.numeric(format(date, "%Y")))) |>
+    distinct(date, .keep_all = TRUE)
+rm(raw_hist, raw_pres)
+stopifnot(all(count(meas, date)$n == 1))
+head(meas)
+```
+
+```{r}
+ggplot(meas, aes(date, temp)) +
+    geom_line() +
+    geom_smooth(method = "gam")
+```
+
+```{r}
+filter(meas, year >= 2018) |>
+    ggplot(aes(date, temp)) +
+        geom_line()
+```
+
+```{r}
+filter(meas, year == 2023) |>
+    ggplot(aes(date, temp)) +
+        geom_line() +
+        geom_smooth()
+```
+
