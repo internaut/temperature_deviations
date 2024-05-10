@@ -36,7 +36,8 @@ head(raw_pres)
 meas <- bind_rows(raw_hist, raw_pres) |>
     select(date = MESS_DATUM, temp = TMK) |>
     mutate(date = as.POSIXct(strptime(date, "%Y%m%d")),
-           year = as.integer(as.numeric(format(date, "%Y")))) |>
+           year = as.integer(as.numeric(format(date, "%Y"))),
+           day = as.integer(as.numeric(format(date, "%j")))) |>
     distinct(date, .keep_all = TRUE)
 rm(raw_hist, raw_pres)
 stopifnot(all(count(meas, date)$n == 1))
@@ -62,3 +63,80 @@ filter(meas, year == 2023) |>
         geom_smooth()
 ```
 
+```{r}
+ggplot(meas, aes(day, temp, color = year)) +
+    geom_point(alpha = 0.25) +
+    scale_color_binned(type = 'viridis')
+```
+
+```{r}
+m1 <- lm(temp ~ cos(2 * pi * day/366) + sin(2 * pi * day/366), meas)
+summary(m1)
+```
+
+```{r}
+plot(m1)
+```
+
+```{r}
+meas_fit <- cbind(meas, m1 = fitted(m1))
+
+filter(meas_fit, year >= 2018) |>
+    ggplot() +
+        geom_line(aes(date, temp), alpha = 0.25) +
+        geom_line(aes(date, m1), color = 'red')
+```
+
+```{r}
+ggplot(meas_fit) +
+    geom_line(aes(date, temp), alpha = 0.25) +
+    geom_line(aes(date, m1), color = 'red')
+```
+
+
+
+```{r}
+filter(meas_fit, year %in% (1950 + 0:6 * 10)) |>
+    ggplot(aes(day, temp, color = year)) +
+        geom_point(alpha = 0.25) +
+        geom_line(aes(day, m1), color = 'red') +
+        scale_color_binned(type = 'viridis')
+        
+```
+
+
+
+```{r}
+m2 <- lm(temp ~ year + cos(2 * pi * day/366) + sin(2 * pi * day/366), meas)
+summary(m2)
+```
+
+```{r}
+plot(m2)
+```
+
+
+```{r}
+meas_fit2 <- cbind(meas, m2 = fitted(m2))
+
+filter(meas_fit2, year >= 2018) |>
+    ggplot() +
+        geom_line(aes(date, temp), alpha = 0.25) +
+        geom_line(aes(date, m2), color = 'red')
+```
+
+```{r}
+ggplot(meas_fit2) +
+    geom_line(aes(date, temp), alpha = 0.25) +
+    geom_line(aes(date, m2), color = 'red')
+```
+
+
+```{r}
+filter(meas_fit2, year %in% (1950 + 0:6 * 10)) |>
+    ggplot(aes(day, temp, color = year)) +
+        geom_point(alpha = 0.25) +
+        geom_line(aes(day, m2, color = year)) +
+        scale_color_binned(type = 'viridis')
+        
+```
