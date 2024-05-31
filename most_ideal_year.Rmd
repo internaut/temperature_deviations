@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, warning=FALSE, message=FALSE}
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 
 theme_set(theme_minimal())
@@ -79,18 +80,18 @@ plot(m1)
 ```
 
 ```{r}
-meas_fit <- cbind(meas, m1 = fitted(m1))
+meas_fit <- cbind(meas, pred = fitted(m1))
 
 filter(meas_fit, year >= 2018) |>
     ggplot() +
         geom_line(aes(date, temp), alpha = 0.25) +
-        geom_line(aes(date, m1), color = 'red')
+        geom_line(aes(date, pred), color = 'red')
 ```
 
 ```{r}
 ggplot(meas_fit) +
     geom_line(aes(date, temp), alpha = 0.25) +
-    geom_line(aes(date, m1), color = 'red')
+    geom_line(aes(date, pred), color = 'red')
 ```
 
 
@@ -99,7 +100,7 @@ ggplot(meas_fit) +
 filter(meas_fit, year %in% (1950 + 0:6 * 10)) |>
     ggplot(aes(day, temp, color = year)) +
         geom_point(alpha = 0.25) +
-        geom_line(aes(day, m1), color = 'red') +
+        geom_line(aes(day, pred), color = 'red') +
         scale_color_binned(type = 'viridis')
         
 ```
@@ -117,18 +118,18 @@ plot(m2)
 
 
 ```{r}
-meas_fit2 <- cbind(meas, m2 = fitted(m2))
+meas_fit2 <- cbind(meas, pred = fitted(m2))
 
 filter(meas_fit2, year >= 2018) |>
     ggplot() +
         geom_line(aes(date, temp), alpha = 0.25) +
-        geom_line(aes(date, m2), color = 'red')
+        geom_line(aes(date, pred), color = 'red')
 ```
 
 ```{r}
 ggplot(meas_fit2) +
     geom_line(aes(date, temp), alpha = 0.25) +
-    geom_line(aes(date, m2), color = 'red')
+    geom_line(aes(date, pred), color = 'red')
 ```
 
 
@@ -136,7 +137,76 @@ ggplot(meas_fit2) +
 filter(meas_fit2, year %in% (1950 + 0:6 * 10)) |>
     ggplot(aes(day, temp, color = year)) +
         geom_point(alpha = 0.25) +
-        geom_line(aes(day, m2, color = year)) +
+        geom_line(aes(day, pred, color = year)) +
         scale_color_binned(type = 'viridis')
         
 ```
+
+```{r}
+resid <- meas_fit2$temp - meas_fit2$pred
+hist(resid)
+```
+
+```{r}
+quantile(resid, c(0.05, 0.95))
+```
+
+
+```{r}
+resid_stats <- group_by(meas_fit2, year) |>
+    summarise(me = mean(temp - pred),
+              mae = mean(abs(temp - pred)),
+              prop_days_warmer = mean(temp > pred + 6),
+              prop_days_colder = mean(temp < pred - 6))
+              #rmse = sqrt(mean((temp - pred)^2)))
+resid_stats
+```
+
+```{r}
+resid_stats_plt <- pivot_longer(resid_stats, !year, names_to = "measure")
+
+filter(resid_stats_plt, measure %in% c("mae", "me")) |>
+    ggplot(aes(x = year, y = value, fill = measure)) +
+        geom_col(position = position_dodge())
+```
+
+
+```{r}
+filter(resid_stats_plt, measure %in% c("prop_days_warmer", "prop_days_colder")) |>
+    ggplot(aes(x = year, y = value, fill = measure)) +
+        geom_col(position = position_stack()) +
+        scale_fill_discrete(limits = rev)
+```
+
+
+
+```{r}
+resid_stats_ordered <- filter(resid_stats, year < 2024) |>
+    arrange(mae)
+resid_stats_ordered |> head(1)
+```
+
+```{r}
+resid_stats_ordered |> tail(1)
+```
+
+```{r}
+least_deviation_yr <- resid_stats_ordered |> head(1) |> pull(year)
+most_deviation_yr <- resid_stats_ordered |> tail(1) |> pull(year)
+
+least_most_plt <- data.frame(year = c(least_deviation_yr, most_deviation_yr), label = c("least deviation", "most deviation")) |>
+    inner_join(meas_fit2, by = 'year') |>
+    mutate(label = paste0(year, " (", label, ")"))
+
+ggplot(least_most_plt, aes(day, temp, color = label)) +
+        geom_point(alpha = 0.25) +
+        geom_line(aes(day, pred))
+```
+
+```{r}
+ggplot(least_most_plt, aes(day, temp - pred, color = label)) +
+        geom_point(alpha = 0.25) +
+        geom_hline(yintercept = 0, linetype = "dashed")
+```
+
+
