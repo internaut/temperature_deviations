@@ -18,6 +18,14 @@ theme_set(theme_minimal())
 ```
 
 
+## TODOs
+
+- write explanations
+- proof-read
+- update data
+- remove this section
+- deploy
+
 ## Data
 
 source: https://www.dwd.de/DE/leistungen/klimadatendeutschland/klarchivtagmonat.html
@@ -45,7 +53,7 @@ stopifnot(all(count(meas, date)$n == 1))
 head(meas)
 ```
 
-```{r}
+```{r, message=FALSE, fig.width=10}
 ggplot(meas, aes(date, temp)) +
     geom_line() +
     geom_smooth(method = "gam")
@@ -144,7 +152,8 @@ filter(meas_fit2, year %in% (1950 + 0:6 * 10)) |>
 
 ```{r}
 resid <- meas_fit2$temp - meas_fit2$pred
-hist(resid)
+ggplot(data.frame(resid = resid), aes(resid)) +
+    geom_histogram(bins = 20)
 ```
 
 ```{r}
@@ -153,11 +162,13 @@ quantile(resid, c(0.05, 0.95))
 
 
 ```{r}
+thresh_unusal_temp <- 6
+
 resid_stats <- group_by(meas_fit2, year) |>
     summarise(me = mean(temp - pred),
               mae = mean(abs(temp - pred)),
-              prop_days_warmer = mean(temp > pred + 6),
-              prop_days_colder = mean(temp < pred - 6))
+              prop_days_warmer = mean(temp > pred + thresh_unusal_temp),
+              prop_days_colder = mean(temp < pred - thresh_unusal_temp))
               #rmse = sqrt(mean((temp - pred)^2)))
 resid_stats
 ```
@@ -167,7 +178,8 @@ resid_stats_plt <- pivot_longer(resid_stats, !year, names_to = "measure")
 
 filter(resid_stats_plt, measure %in% c("mae", "me")) |>
     ggplot(aes(x = year, y = value, fill = measure)) +
-        geom_col(position = position_dodge())
+        geom_col(position = position_dodge()) +
+        facet_wrap(vars(measure), nrow = 2, scales = "free_y")
 ```
 
 
@@ -196,17 +208,41 @@ most_deviation_yr <- resid_stats_ordered |> tail(1) |> pull(year)
 
 least_most_plt <- data.frame(year = c(least_deviation_yr, most_deviation_yr), label = c("least deviation", "most deviation")) |>
     inner_join(meas_fit2, by = 'year') |>
-    mutate(label = paste0(year, " (", label, ")"))
+    mutate(label = paste0(year, " (", label, ")"),
+           resid = temp - pred,
+           transparency = ifelse(abs(resid) > thresh_unusal_temp, 0.5, 0.1))
 
 ggplot(least_most_plt, aes(day, temp, color = label)) +
-        geom_point(alpha = 0.25) +
-        geom_line(aes(day, pred))
+    geom_point(aes(alpha = transparency)) +
+    geom_line(aes(day, pred)) +
+    scale_color_discrete(guide = guide_legend(title = NULL)) +
+    scale_alpha_identity(guide = NULL)
 ```
 
+```{r, fig.width=10}
+ggplot(least_most_plt, aes(day, resid, color = label, alpha = transparency)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_hline(yintercept = -thresh_unusal_temp, linetype = "dotted") +
+    geom_hline(yintercept = thresh_unusal_temp, linetype = "dotted") +
+    geom_point() +
+    scale_color_discrete(guide = guide_legend(title = NULL)) +
+    scale_alpha_identity(guide = NULL)
+```
+
+- probably remove this:
+
 ```{r}
-ggplot(least_most_plt, aes(day, temp - pred, color = label)) +
-        geom_point(alpha = 0.25) +
-        geom_hline(yintercept = 0, linetype = "dashed")
+least_most_baseline1985 <- mutate(
+    least_most_plt,
+    pred = ifelse(year == 2017, pred - (2017 - 1985) * m2$coefficients[2], pred),
+    resid = temp - pred,
+    transparency = ifelse(abs(resid) > thresh_unusal_temp, 0.5, 0.1))
+
+ggplot(least_most_baseline1985, aes(day, temp, color = label)) +
+    geom_point(aes(alpha = transparency)) +
+    geom_line(aes(day, pred)) +
+    scale_color_discrete(guide = guide_legend(title = NULL)) +
+    scale_alpha_identity(guide = NULL)
 ```
 
 
