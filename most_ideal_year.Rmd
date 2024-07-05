@@ -26,9 +26,13 @@ theme_set(theme_minimal())
 - remove this section
 - deploy
 
+## Introduction
+
+Contemplating about the weather, I wondered if I could find out the "most unusual" and "most ideal" years regarding air temperature in Germany, i.e. if I could identify the years in which the daily temperature deviated the most and the least from the expected seasonal temperature. So I decided to look into historical climate data, created an extremely simplified seasonal temperature model and then investigated the deviations from that model.
+
 ## Data
 
-source: https://www.dwd.de/DE/leistungen/klimadatendeutschland/klarchivtagmonat.html
+I retrieved the [historical climate data for Germany](https://www.dwd.de/DE/leistungen/klimadatendeutschland/klarchivtagmonat.html) from 1950 to now from the [German Meteorological Service (Deutscher Wetterdienst – DWD)](https://www.dwd.de/). The data come as delimited files with semicolon as column separator. Historical data until 2022 and present data from 2022 to now come as separate files.
 
 ```{r}
 raw_hist <- read.delim('data/produkt_klima_tag_19500101_20221231_00403.txt', sep = ';')
@@ -40,20 +44,21 @@ raw_pres <- read.delim('data/produkt_klima_tag_20221107_20240509_00403.txt', sep
 head(raw_pres)
 ```
 
+After reading in the files, we merge them, select only the necessary variables, transform the dates and remove duplicates (since the historical and the present data both contain observations from 2022):
 
 ```{r}
 meas <- bind_rows(raw_hist, raw_pres) |>
     select(date = MESS_DATUM, temp = TMK) |>
     mutate(date = as.POSIXct(strptime(date, "%Y%m%d")),
            year = as.integer(as.numeric(format(date, "%Y"))),
-           day = as.integer(as.numeric(format(date, "%j")))) |>
-    distinct(date, .keep_all = TRUE)
+           day = as.integer(as.numeric(format(date, "%j")))) |> # day of the year as decimal number from 1 to 366
+    distinct(date, .keep_all = TRUE)   # remove duplicates
 rm(raw_hist, raw_pres)
-stopifnot(all(count(meas, date)$n == 1))
+stopifnot(all(count(meas, date)$n == 1))   # make sure there are no duplicates
 head(meas)
 ```
 
-```{r, message=FALSE, fig.width=10}
+```{r, message=FALSE, fig.width=10, fig.height=6}
 ggplot(meas, aes(date, temp)) +
     geom_line() +
     geom_smooth(method = "gam")
@@ -157,7 +162,7 @@ ggplot(data.frame(resid = resid), aes(resid)) +
 ```
 
 ```{r}
-quantile(resid, c(0.05, 0.95))
+quantile(abs(resid), 0.9)
 ```
 
 
@@ -202,7 +207,7 @@ resid_stats_ordered |> head(1)
 resid_stats_ordered |> tail(1)
 ```
 
-```{r}
+```{r, fig.width=10, fig.height=6}
 least_deviation_yr <- resid_stats_ordered |> head(1) |> pull(year)
 most_deviation_yr <- resid_stats_ordered |> tail(1) |> pull(year)
 
@@ -219,6 +224,7 @@ ggplot(least_most_plt, aes(day, temp, color = label)) +
     scale_alpha_identity(guide = NULL)
 ```
 
+
 ```{r, fig.width=10}
 ggplot(least_most_plt, aes(day, resid, color = label, alpha = transparency)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
@@ -229,20 +235,10 @@ ggplot(least_most_plt, aes(day, resid, color = label, alpha = transparency)) +
     scale_alpha_identity(guide = NULL)
 ```
 
-- probably remove this:
-
-```{r}
-least_most_baseline1985 <- mutate(
-    least_most_plt,
-    pred = ifelse(year == 2017, pred - (2017 - 1985) * m2$coefficients[2], pred),
-    resid = temp - pred,
-    transparency = ifelse(abs(resid) > thresh_unusal_temp, 0.5, 0.1))
-
-ggplot(least_most_baseline1985, aes(day, temp, color = label)) +
-    geom_point(aes(alpha = transparency)) +
-    geom_line(aes(day, pred)) +
+```{r, fig.width=10, fig.height=6}
+ggplot(least_most_plt, aes(day, temp, color = label)) +
+    geom_smooth(method = "loess", span = 0.2) +
+    geom_line(aes(day, pred), linetype = "dashed") +
     scale_color_discrete(guide = guide_legend(title = NULL)) +
     scale_alpha_identity(guide = NULL)
 ```
-
-
