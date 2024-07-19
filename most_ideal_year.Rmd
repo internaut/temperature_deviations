@@ -28,11 +28,11 @@ theme_set(theme_minimal())
 
 ## Introduction
 
-Contemplating about the weather, I wondered if I could find out the "most unusual" and "most ideal" years regarding air temperature in Germany, i.e. if I could identify the years in which the daily temperature deviated the most and the least from the expected seasonal temperature. So I decided to look into historical climate data, created an extremely simplified seasonal temperature model and then investigated the deviations from that model.
+Contemplating about the weather, I wondered if I could find out the "most unusual" and "most ideal" years regarding air temperature in Germany, i.e. if I could identify the years in which the daily temperature deviated the most and the least from the expected seasonal temperature. So I decided to look into historical climate data, created an extremely simplified seasonal temperature model and then investigated the deviations from that model. Although it's all quite simple, this little exploration gives some insights into how and why we can use a linear model for such data.
 
 ## Data
 
-I retrieved the [historical climate data for Germany](https://www.dwd.de/DE/leistungen/klimadatendeutschland/klarchivtagmonat.html) from 1950 to now from the [German Meteorological Service (Deutscher Wetterdienst – DWD)](https://www.dwd.de/). The data come as delimited files with semicolon as column separator. Historical data until 2022 and present data from 2022 to now come as separate files.
+I retrieved the [historical climate data](https://www.dwd.de/DE/leistungen/klimadatendeutschland/klarchivtagmonat.html) for a weather station in Berlin-Dahlem (a bit outside the city) from 1950 to now from the [German Meteorological Service (Deutscher Wetterdienst – DWD)](https://www.dwd.de/). The data come as delimited files with semicolon as column separator. Historical data until 2022 and present data from 2022 to now come as separate files.
 
 ```{r}
 raw_hist <- read.delim('data/produkt_klima_tag_19500101_20221231_00403.txt', sep = ';')
@@ -48,43 +48,103 @@ After reading in the files, we merge them, select only the necessary variables, 
 
 ```{r}
 meas <- bind_rows(raw_hist, raw_pres) |>
-    select(date = MESS_DATUM, temp = TMK) |>
+    select(date = MESS_DATUM, temp = TMK) |>   # TMK is day-time average temperature in °C
     mutate(date = as.POSIXct(strptime(date, "%Y%m%d")),
            year = as.integer(as.numeric(format(date, "%Y"))),
            day = as.integer(as.numeric(format(date, "%j")))) |> # day of the year as decimal number from 1 to 366
     distinct(date, .keep_all = TRUE)   # remove duplicates
-rm(raw_hist, raw_pres)
+rm(raw_hist, raw_pres)                 # don't need the raw data any more
 stopifnot(all(count(meas, date)$n == 1))   # make sure there are no duplicates
 head(meas)
 ```
 
-```{r, message=FALSE, fig.width=10, fig.height=6}
+## Visual analysis
+
+Let's visualize the time series with a simple plot. I will also add a smoothed curve showing an overall trend, which indicates a nearly linear increase in average yearly temperature by about 2°C since the 1950's. I'll later come back to that. We can also see the typical seasonal changes.
+
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=6}
 ggplot(meas, aes(date, temp)) +
     geom_line() +
-    geom_smooth(method = "gam")
+    geom_smooth(method = "gam") +
+    labs(title = "Daily day-time average temperature in Berlin-Dahlem over time",
+         x = "",
+         y = "Temperature in °C")
 ```
 
-```{r}
+The periodical temperature changes can be visualized by by looking at a smaller time frame:
+
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=6}
 filter(meas, year >= 2018) |>
     ggplot(aes(date, temp)) +
-        geom_line()
+        geom_line() +
+        geom_smooth(span = 0.2, method = "loess") +
+        labs(title = "Daily day-time average temperature in Berlin-Dahlem since 2018",
+             x = "",
+             y = "Temperature in °C")
 ```
-
-```{r}
+<!--
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=6}
 filter(meas, year == 2023) |>
     ggplot(aes(date, temp)) +
-        geom_line() +
-        geom_smooth()
+        geom_line(method = "loess") +
+        geom_smooth() +
+        labs(title = "Daily day-time average temperature in Berlin-Dahlem in 2023",
+             x = "",
+             y = "Temperature in °C")
 ```
+-->
 
-```{r}
+We can also plot the yearly trend by plotting the temperature against the day of the year. We can see the typical seasonal pattern but also the slight overall increase in temperature over the years, since more recent years (yellow color) tend to have higher temperatures, especially in the winter.
+
+```{r, fig.width=10, fig.height=6}
 ggplot(meas, aes(day, temp, color = year)) +
-    geom_point(alpha = 0.25) +
-    scale_color_binned(type = 'viridis')
+    geom_line(alpha = 0.25) +
+    scale_color_binned(name = "Year", type = 'viridis') +
+    labs(title = "Daily day-time average temperature in Berlin-Dahlem over time",
+             x = "Day of the year",
+             y = "Temperature in °C")
 ```
 
+## Modeling
+
+Naturally, and confirmed with the above plots, we can use a periodic function like the cosine function to model these temperatures. In general this periodic function can be written as
+
+$$
+y = c \cos (x + \varphi),
+$$
+
+where $c$ controls the amplitude (maximum spikes), $\varphi$ the phase (shift on the x-axis) and $x$ the frequency. With a linear model, we can only fit linear terms like $y = ax + b$, so we have the problem that we can't estimate the frequency and the phase. Luckily – in our very simple case – the frequency is already known: the seasonal pattern repeats yearly, so we can calculate $x = 2 \pi D / 366$, where $D$ is the day of the year. Because of leap years, $D$ can range from 1 to 366 and so we divide it by 366. This means that over the course of a year, $x$ makes "a full circle" from above 0 to $2 \pi$.
+
+The second problem – that we can't estimate the phase with a linear model directly – can be solved by applying a neat trick that [transforms the cosine wave with an amplitude and a phase shift to a linear combination of a cosine and a sine wave](https://en.wikipedia.org/wiki/List_of_trigonometric_identities#Linear_combinations):
+
+$$
+c \cos (x + \varphi) = a \cos x + b \sin x,
+$$
+
+where
+
+$$
+c = \text{sgn}(a) \sqrt{a^2 + b^2}, \\
+\varphi = \arctan \frac{-b} a.
+$$
+
+This means we can estimate $a$ and $b$ as coefficients for the above linear combination that is equivalent to the initially defined cosine wave. Hence we can finally specify our linear model `m1` for the temperatures $Y_t$ as
+
+
+$$
+Y_t = \beta_0 + \beta_1 \cos(x_t) + \beta_2 \sin(x_t) + \epsilon_t,
+$$
+
+where $x_t$ is the only variable – the day of the year transformed to range $(0, 2 \pi]$ as described above –, $\beta_0$ to $\beta_2$ are the coefficients we seek to estimate and  $\epsilon_t$ is the error term.
+
+TODO: explain why not adding harmonics
+
 ```{r}
-m1 <- lm(temp ~ cos(2 * pi * day/366) + sin(2 * pi * day/366), meas)
+# compute frequency x
+meas <- mutate(meas, x = 2 * pi * day/366)
+
+# fit the model
+m1 <- lm(temp ~ cos(x) + sin(x), meas)
 summary(m1)
 ```
 
@@ -100,6 +160,25 @@ filter(meas_fit, year >= 2018) |>
         geom_line(aes(date, temp), alpha = 0.25) +
         geom_line(aes(date, pred), color = 'red')
 ```
+
+```{r}
+a <- m1$coefficients[2]
+b <- m1$coefficients[3]
+
+c <- sign(a) * sqrt(a^2 + b^2)
+phi <- atan(-b/a)
+
+meas_fit$pred2 <- m1$coefficients[1] + c * cos(meas$x + phi)
+
+filter(meas_fit, year >= 2018) |>
+    ggplot() +
+        geom_line(aes(date, temp), alpha = 0.25) +
+        geom_line(aes(date, pred), color = 'red') +
+        geom_line(aes(date, pred2), color = 'blue', linetype = "dashed")
+
+```
+
+
 
 ```{r}
 ggplot(meas_fit) +
