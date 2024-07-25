@@ -2,7 +2,11 @@
 title: "The most ideal year"
 author: "Markus Konrad"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  bookdown::html_document2:
+      number_sections: false
+      toc: true
+
 ---
 
 ```{r setup, include=FALSE}
@@ -13,6 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(ggtext)
 
 theme_set(theme_minimal())
 ```
@@ -44,7 +49,7 @@ raw_pres <- read.delim('data/produkt_klima_tag_20221107_20240509_00403.txt', sep
 head(raw_pres)
 ```
 
-After reading in the files, we merge them, select only the necessary variables, transform the dates and remove duplicates (since the historical and the present data both contain observations from 2022):
+After reading in the files, we merge them, select only the necessary variables, transform the dates and remove duplicates (since the historical and the present data both contain observations from 2022) to generate our final measurements dataset `meas`:
 
 ```{r}
 meas <- bind_rows(raw_hist, raw_pres) |>
@@ -62,7 +67,7 @@ head(meas)
 
 Let's visualize the time series with a simple plot. I will also add a smoothed curve showing an overall trend, which indicates a nearly linear increase in average yearly temperature by about 2°C since the 1950's. I'll later come back to that. We can also see the typical seasonal changes.
 
-```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+```{r temp-time-trend, message=FALSE, warning=FALSE, fig.width=10, fig.height=6, fig.cap='Daily day-time average temperature in Berlin-Dahlem over time'}
 ggplot(meas, aes(date, temp)) +
     geom_line() +
     geom_smooth(method = "gam") +
@@ -96,7 +101,7 @@ filter(meas, year == 2023) |>
 
 We can also plot the yearly trend by plotting the temperature against the day of the year. We can see the typical seasonal pattern but also the slight overall increase in temperature over the years, since more recent years (yellow color) tend to have higher temperatures, especially in the winter.
 
-```{r, fig.width=10, fig.height=6}
+```{r temp-time-seasonal, fig.width=10, fig.height=6, fig.cap='Daily day-time average temperature in Berlin-Dahlem over time'}
 ggplot(meas, aes(day, temp, color = year)) +
     geom_line(alpha = 0.25) +
     scale_color_binned(name = "Year", type = 'viridis') +
@@ -109,17 +114,17 @@ ggplot(meas, aes(day, temp, color = year)) +
 
 Naturally, and confirmed with the above plots, we can use a periodic function like the cosine function to model these temperatures. In general this periodic function can be written as
 
-$$
-y = c \cos (x + \varphi),
-$$
+\begin{equation}
+y = c \cos (x + \varphi), (\#eq:periodic)
+\end{equation}
 
 where $c$ controls the amplitude (maximum spikes), $\varphi$ the phase (shift on the x-axis) and $x$ the frequency. With a linear model, we can only fit linear terms like $y = ax + b$, so we have the problem that we can't estimate the frequency and the phase. Luckily – in our very simple case – the frequency is already known: the seasonal pattern repeats yearly, so we can calculate $x = 2 \pi D / 366$, where $D$ is the day of the year. Because of leap years, $D$ can range from 1 to 366 and so we divide it by 366. This means that over the course of a year, $x$ makes "a full circle" from above 0 to $2 \pi$.
 
 The second problem – that we can't estimate the phase with a linear model directly – can be solved by applying a neat trick that [transforms the cosine wave with an amplitude and a phase shift to a linear combination of a cosine and a sine wave](https://en.wikipedia.org/wiki/List_of_trigonometric_identities#Linear_combinations):
 
-$$
-c \cos (x + \varphi) = a \cos x + b \sin x,
-$$
+\begin{equation}
+c \cos (x + \varphi) = a \cos x + b \sin x, (\#eq:linearcomb)
+\end{equation}
 
 where
 
@@ -131,13 +136,15 @@ $$
 This means we can estimate $a$ and $b$ as coefficients for the above linear combination that is equivalent to the initially defined cosine wave. Hence we can finally specify our linear model `m1` for the temperatures $Y_t$ as
 
 
-$$
-Y_t = \beta_0 + \beta_1 \cos(x_t) + \beta_2 \sin(x_t) + \epsilon_t,
-$$
+\begin{equation}
+Y_t = \beta_0 + \beta_1 \cos(x_t) + \beta_2 \sin(x_t) + \epsilon_t,  (\#eq:m1)
+\end{equation}
 
-where $x_t$ is the only variable – the day of the year transformed to range $(0, 2 \pi]$ as described above –, $\beta_0$ to $\beta_2$ are the coefficients we seek to estimate and  $\epsilon_t$ is the error term.
+where $x_t$ is the only regressor – the day of the year transformed to range $(0, 2 \pi]$ as described above –, $\beta_0$ to $\beta_2$ are the coefficients we seek to estimate and  $\epsilon_t$ is the error term.
 
-TODO: explain why not adding harmonics
+## Model estimation
+
+We can now estimate the model `m1` in R by first computing $x_t$ and then using `lm` to fit the model using our measurements `meas`:
 
 ```{r}
 # compute frequency x
@@ -148,91 +155,187 @@ m1 <- lm(temp ~ cos(x) + sin(x), meas)
 summary(m1)
 ```
 
-```{r}
-plot(m1)
-```
+The model has a decent fit given its simplicity: About 75% of the variation of the temperature can be explained by the seasonal pattern we modeled with the periodic functions. The estimated intercept reflects the mean of the temperature and the coefficients for the periodic functions result in the oscillation around the mean.
+
+We can see that for predicted values near 0°C the errors are a bit larger and also the distribution of the errors is slightly left skewed.
 
 ```{r}
+plot(m1, which = 1:2, ask = FALSE)
+```
+
+Let's plot the model predictions of the temperatures on top of the measured values. For a better overview, we only consider data from 2018 or newer:
+
+```{r, fig.width=10, fig.height=6}
 meas_fit <- cbind(meas, pred = fitted(m1))
 
 filter(meas_fit, year >= 2018) |>
     ggplot() +
         geom_line(aes(date, temp), alpha = 0.25) +
-        geom_line(aes(date, pred), color = 'red')
+        geom_line(aes(date, pred), color = 'red') +
+        labs(title = "Daily day-time average temperature in Berlin-Dahlem since 2018",
+             subtitle = "Model predictions in <span style='color:red'>red</span>.",
+             x = "",
+             y = "Temperature in °C") +
+        theme(plot.subtitle = element_markdown())
 ```
 
-```{r}
+Let's show that we can again apply the transformation in equation \@ref(eq:linearcomb) so that we can recover the cosine wave form in equation \@ref(eq:periodic) from the linear combination form of the model equation \@ref(eq:m1). As expected, we get same predictions from both model representations:
+
+```{r, fig.width=10, fig.height=6}
 a <- m1$coefficients[2]
 b <- m1$coefficients[3]
 
+# calculate c and phi from the coefficients a and b
 c <- sign(a) * sqrt(a^2 + b^2)
 phi <- atan(-b/a)
 
+# predictions from the cosine wave form of the model equation for model m1
 meas_fit$pred2 <- m1$coefficients[1] + c * cos(meas$x + phi)
 
 filter(meas_fit, year >= 2018) |>
     ggplot() +
         geom_line(aes(date, temp), alpha = 0.25) +
         geom_line(aes(date, pred), color = 'red') +
-        geom_line(aes(date, pred2), color = 'blue', linetype = "dashed")
+        geom_line(aes(date, pred2), color = 'blue', linetype = "dashed") +
+        labs(title = "Daily day-time average temperature in Berlin-Dahlem since 2018",
+             subtitle = "Model predictions in <span style='color:red'>red (linear combination form)</span> 
+                         and <span style='color:blue'>blue (cosine wave form)</span>.",
+             x = "",
+             y = "Temperature in °C") +
+        theme(plot.subtitle = element_markdown())
 
 ```
 
+Let's plot the model predictions for the whole time range.
 
-
-```{r}
+```{r, fig.width=10, fig.height=6}
 ggplot(meas_fit) +
     geom_line(aes(date, temp), alpha = 0.25) +
-    geom_line(aes(date, pred), color = 'red')
+    geom_line(aes(date, pred), color = 'red') +
+    labs(title = "Daily day-time average temperature in Berlin-Dahlem over time",
+         subtitle = "Model predictions in <span style='color:red'>red</span>.",
+         x = "",
+         y = "Temperature in °C") +
+    theme(plot.subtitle = element_markdown())
 ```
 
+It's barely visible at this scale, but the model systematically overestimates temperatures around the beginning of the time range and underestimates temperatures towards the end of the time range. We can see this more clearly with a plot similar to figure \@ref(fig:temp-time-seasonal). Temperatures before 1970 (dark purple) tend to be overestimated while temperatures from 2000 and later tend to be underestimated:
 
-
-```{r}
-filter(meas_fit, year %in% (1950 + 0:6 * 10)) |>
-    ggplot(aes(day, temp, color = year)) +
-        geom_point(alpha = 0.25) +
-        geom_line(aes(day, pred), color = 'red') +
-        scale_color_binned(type = 'viridis')
-        
+```{r, fig.width=10, fig.height=6}
+ggplot(meas_fit, aes(day, temp, color = year)) +
+    geom_line(alpha = 0.25) +
+    geom_line(aes(day, pred), color = 'red') +
+    scale_color_binned(name = "Year", type = 'viridis') +
+    labs(title = "Daily day-time average temperature in Berlin-Dahlem over time",
+         subtitle = "Model predictions in <span style='color:red'>red</span>.",
+         x = "Day of the year",
+         y = "Temperature in °C") +
+    theme(plot.subtitle = element_markdown())
 ```
 
+We can confirm this conjecture quantitatively by calculating the mean error of our predictions $\hat Y_t - Y_t$ for different decades:
 
+```{r mean-pred-err-decade-m1, fig.cap="Mean prediction error per decade for m1"}
+(mean_err_per_decade <- mutate(meas_fit, d = round((year - 1900) / 10) * 10,
+                 decade = as.ordered(ifelse(d < 100, paste0("19", d, "s"), sprintf("20%02ds", d - 100)))) |>
+    group_by(decade) |>
+    summarise(mean_error = mean(pred - temp)))
+ggplot(mean_err_per_decade, aes(x = decade, y = mean_error)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point() +
+    scale_y_continuous(limits = c(-2, 2)) +
+    labs(title = "Mean prediction error per decade for m1",
+         x = "Decade",
+         y = "Prediction error in °C")
+```
+
+## Improving the model
+
+The reason for these systematic errors is the slight increase of the yearly average temperature as indicated by the trend line in figure \@ref(fig:temp-time-trend). To put it bluntly: we didn't account for global warming! We can do so by updating the model equation from model `m1` \@ref(eq:m1) in order to include a term for a yearly linear change (i.e. increase) in temperature. Of course this is very simplified, but it should improve our previous model. So our updated model `m2` is now:
+
+$$
+Y_t = \beta_0 + \beta_1 \cos(x_t) + \beta_2 \sin(x_t) + \beta_3 \text{year}_t + \epsilon_t.
+$$
+
+And we can fit this updated model:
 
 ```{r}
-m2 <- lm(temp ~ year + cos(2 * pi * day/366) + sin(2 * pi * day/366), meas)
+m2 <- lm(temp ~ cos(x) + sin(x) + year, meas)
 summary(m2)
 ```
 
+We can see that the fit is slightly better. $R^2$ increased by about $1$ percentage points, indicating that about $1\%$ of the variation of the average daily temperature can be attributed to the yearly temperature increase. This doesn't sound much, however, you should keep in mind that we're talking about daily average temperatures which are influenced by a lot of factors.
+
+The estimated coefficient for the yearly change is about $0.0289$, which means that the we expect the yearly average temperature to increase by about $0.289\text{°C}$ within $10$ years, or about $2.89\text{°C}$ within $100$ years, which is indeed quite much.
+
+Note also that our intercept has changed from about $9.4\text{°C}$ to about $-47.3\text{°C}$, because the model needs to account for the yearly temperature increase and hence predicts an average temperature of $-47.3\text{°C}$ in year $0$, while for example the average temperature in year $2000$ is predicted as $-47.3\text{°C} + 2000 \cdot 0.0289\text{°C} = 10.5\text{°C}$ (and $39.4\text{°C}$ in year $3000$!). This of course shows that such simple models should never be used for extrapolation.
+
+The model fit inspection plots didn't change much:
+
 ```{r}
-plot(m2)
+plot(m2, which = 1:2, ask = FALSE)
 ```
 
+We again check the model fit visually for a smaller time span:
 
-```{r}
+```{r, fig.width=10, fig.height=6}
 meas_fit2 <- cbind(meas, pred = fitted(m2))
 
 filter(meas_fit2, year >= 2018) |>
     ggplot() +
         geom_line(aes(date, temp), alpha = 0.25) +
-        geom_line(aes(date, pred), color = 'red')
+        geom_line(aes(date, pred), color = 'red') +
+        labs(title = "Daily day-time average temperature in Berlin-Dahlem since 2018",
+             subtitle = "Model predictions in <span style='color:red'>red</span>.",
+             x = "",
+             y = "Temperature in °C") +
+        theme(plot.subtitle = element_markdown())
 ```
 
-```{r}
+And we also check it for the full time range. Here, we also see the linear increase in average temperature introduced in the updated model:
+
+```{r, fig.width=10, fig.height=6}
 ggplot(meas_fit2) +
     geom_line(aes(date, temp), alpha = 0.25) +
-    geom_line(aes(date, pred), color = 'red')
+    geom_line(aes(date, pred), color = 'red') +
+    labs(title = "Daily day-time average temperature in Berlin-Dahlem over time",
+         subtitle = "Model predictions in <span style='color:red'>red</span>.",
+         x = "",
+         y = "Temperature in °C") +
+    theme(plot.subtitle = element_markdown())
 ```
 
-
-```{r}
-filter(meas_fit2, year %in% (1950 + 0:6 * 10)) |>
-    ggplot(aes(day, temp, color = year)) +
-        geom_point(alpha = 0.25) +
-        geom_line(aes(day, pred, color = year)) +
-        scale_color_binned(type = 'viridis')
-        
+```{r, fig.width=10, fig.height=6}
+ggplot(meas_fit2, aes(day, temp, color = year)) +
+    geom_line(alpha = 0.25) +
+    geom_line(aes(day, pred, color = year, group = year)) +
+    scale_color_binned(type = 'viridis') +
+    labs(title = "Daily day-time average temperature in Berlin-Dahlem over time",
+         subtitle = "Model predictions as opaque colored curves.",
+         x = "Day of the year",
+         y = "Temperature in °C") +
+    theme(plot.subtitle = element_markdown())
 ```
+
+As compared to model `m1` (see figure \@ref(fig:mean-pred-err-decade-m1)), we don't see the systematic underestimation of the temperature in the later decades anymore:
+
+```{r mean-pred-err-decade-m2, fig.cap="Mean prediction error per decade for m2"}
+(mean_err_per_decade2 <- mutate(meas_fit2, d = round((year - 1900) / 10) * 10,
+                                           decade = as.ordered(ifelse(d < 100, paste0("19", d, "s"),
+                                                                      sprintf("20%02ds", d - 100)))) |>
+    group_by(decade) |>
+    summarise(mean_error = mean(pred - temp)))
+
+ggplot(mean_err_per_decade2, aes(x = decade, y = mean_error)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point() +
+    scale_y_continuous(limits = c(-2, 2)) +
+    labs(title = "Mean prediction error per decade for m2",
+         x = "Decade",
+         y = "Prediction error in °C")
+```
+
+## Investigating deviations from the model
 
 ```{r}
 resid <- meas_fit2$temp - meas_fit2$pred
