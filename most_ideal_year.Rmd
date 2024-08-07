@@ -25,9 +25,7 @@ theme_set(theme_minimal())
 
 ## TODOs
 
-- write explanations
 - rename project to "day_temperature_deviations"
-- proof-read
 - update data
 - remove this section
 - deploy
@@ -64,14 +62,14 @@ meas <- bind_rows(raw_hist, raw_pres1, raw_pres2) |>
            year = as.integer(as.numeric(format(date, "%Y"))),
            day = as.integer(as.numeric(format(date, "%j")))) |> # day of the year as decimal number from 1 to 366
     distinct(date, .keep_all = TRUE)   # remove duplicates
-rm(raw_hist, raw_pres)                 # don't need the raw data any more
+rm(raw_hist, raw_pres1, raw_pres2)         # don't need the raw data any more
 stopifnot(all(count(meas, date)$n == 1))   # make sure there are no duplicates
 head(meas)
 ```
 
 ## Visual analysis
 
-Let's visualize the time series with a simple plot. I will also add a smoothed curve showing an overall trend, which indicates a nearly linear increase in average yearly temperature by about 2°C since the 1950's. I'll later come back to that. We can also see the typical seasonal changes.
+Let's visualize the time series with a simple plot. I will also add a smoothed curve showing an overall trend, which indicates a nearly linear increase in average annual temperature by about 2°C since the 1950's. I'll later come back to that. We can also see the typical seasonal changes.
 
 ```{r temp-time-trend, message=FALSE, warning=FALSE, fig.width=10, fig.height=6, fig.cap='Daily day-time average temperature in Berlin-Dahlem over time'}
 ggplot(meas, aes(date, temp)) +
@@ -82,7 +80,7 @@ ggplot(meas, aes(date, temp)) +
          y = "Temperature in °C")
 ```
 
-The periodical temperature changes can be visualized by by looking at a smaller time frame:
+The periodical temperature changes can be better shown by looking at a smaller time frame:
 
 ```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=6}
 filter(meas, year >= 2018) |>
@@ -94,7 +92,7 @@ filter(meas, year >= 2018) |>
              y = "Temperature in °C")
 ```
 
-We can also plot the yearly trend by plotting the temperature against the day of the year. We can see the typical seasonal pattern but also the slight overall increase in temperature over the years, since more recent years (yellow color) tend to have higher temperatures, especially in the winter.
+We can also visualize the annual trend by plotting the temperature against the day of the year. We can see the typical seasonal pattern, but also the slight overall increase in temperature over the years, since more recent years (yellow color) tend to have higher temperatures, especially in the winter.
 
 ```{r temp-time-seasonal, fig.width=10, fig.height=6, fig.cap='Daily day-time average temperature in Berlin-Dahlem over time'}
 ggplot(meas, aes(day, temp, color = year)) +
@@ -143,7 +141,7 @@ We can now estimate the model `m1` in R by first computing $x_t$ and then using 
 
 ```{r}
 # compute frequency x
-meas <- mutate(meas, x = 2 * pi * day/366)
+meas$x <- 2 * pi * meas$day/366
 
 # fit the model
 m1 <- lm(temp ~ cos(x) + sin(x), meas)
@@ -174,7 +172,7 @@ filter(meas_fit, year >= 2018) |>
         theme(plot.subtitle = element_markdown())
 ```
 
-Let's show that we can again apply the transformation in equation \@ref(eq:linearcomb) so that we can recover the cosine wave form in equation \@ref(eq:periodic) from the linear combination form of the model equation \@ref(eq:m1). As expected, we get same predictions from both model representations:
+Let's show that we can again apply the transformation in equation \@ref(eq:linearcomb) so that we can recover the cosine wave form in equation \@ref(eq:periodic) from the linear combination form of the model equation \@ref(eq:m1). As expected, we get the same predictions from both model representations:
 
 ```{r, fig.width=10, fig.height=6}
 a <- m1$coefficients[2]
@@ -246,7 +244,7 @@ ggplot(mean_err_per_decade, aes(x = decade, y = mean_error)) +
 
 ## Improving the model
 
-The reason for these systematic errors is the slight increase of the yearly average temperature as indicated by the trend line in figure \@ref(fig:temp-time-trend). To put it bluntly: we didn't account for global warming! We can do so by updating the model equation from model `m1` \@ref(eq:m1) in order to include a term for a yearly linear change (i.e. increase) in temperature. Of course this is very simplified, but it should improve our previous model. So our updated model `m2` is now:
+The reason for these systematic errors is the slight increase of the average temperature per annum as indicated by the trend line in figure \@ref(fig:temp-time-trend). To put it bluntly: we didn't account for global warming! We can do so by updating the model equation from model `m1` \@ref(eq:m1) in order to include a term for a yearly linear change (i.e. increase) in temperature. Of course this is very simplified, but it should improve our previous model. So our updated model `m2` is now:
 
 $$
 Y_t = \beta_0 + \beta_1 \cos(x_t) + \beta_2 \sin(x_t) + \beta_3 \text{year}_t + \epsilon_t.
@@ -259,11 +257,11 @@ m2 <- lm(temp ~ cos(x) + sin(x) + year, meas)
 summary(m2)
 ```
 
-We can see that the fit is slightly better. $R^2$ increased by about $1$ percentage points, indicating that about $1\%$ of the variation of the average daily temperature can be attributed to the yearly temperature increase. This doesn't sound much, however, you should keep in mind that we're talking about daily average temperatures which are influenced by a lot of factors.
+We can see that the fit is slightly better. $R^2$ increased by about $1$ percentage points, indicating that about $1\%$ of the variation of the average daily temperature can be attributed to the annual temperature increase. This doesn't sound much, however, you should keep in mind that we're talking about daily average temperatures which are influenced by a lot of factors.
 
-The estimated coefficient for the yearly change is about $0.0289$, which means that the we expect the yearly average temperature to increase by about $0.289\text{°C}$ within $10$ years, or about $2.89\text{°C}$ within $100$ years, which is indeed quite much.
+The estimated coefficient for the annual change is about $0.0289$, which means that the we expect the annual average temperature to increase by about $0.289\text{°C}$ within $10$ years, or about $2.89\text{°C}$ within $100$ years, which is indeed quite much.
 
-Note also that our intercept has changed from about $9.4\text{°C}$ to about $-47.3\text{°C}$, because the model needs to account for the yearly temperature increase and hence predicts an average temperature of $-47.3\text{°C}$ in year $0$, while for example the average temperature in year $2000$ is predicted as $-47.3\text{°C} + 2000 \cdot 0.0289\text{°C} = 10.5\text{°C}$ (and $39.4\text{°C}$ in year $3000$!). This of course shows that such simple models should never be used for extrapolation.
+Note also that our intercept has changed from about $9.4\text{°C}$ to about $-47.3\text{°C}$, because the model needs to account for the annual temperature increase and hence predicts an average temperature of $-47.3\text{°C}$ in year $0$, while for example the average temperature in year $2000$ is predicted as $-47.3\text{°C} + 2000 \cdot 0.0289\text{°C} = 10.5\text{°C}$ (and $39.4\text{°C}$ in year $3000$!). This of course shows that such simple models should never be used for extrapolation.
 
 The model fit inspection plots didn't change much:
 
@@ -332,7 +330,7 @@ ggplot(mean_err_per_decade2, aes(x = decade, y = mean_error)) +
 
 ## Investigating deviations from the model
 
-The `m2` model seems good enough for our purpose to identify the years with the least and the most deviation from the typical seasonal temperatures. We will hence analyze the residuals $Y_t - \hat Y_t$ from `m2` and we'll start by looking at their distribution which is, as confirmed earlier by the model inspection plots, normal around 0°C:
+The `m2` model seems good enough for our purpose to identify the years with the least and the most deviation from the typical seasonal temperatures. We will hence analyze the residuals $Y_t - \hat Y_t$ from `m2` and we'll start by looking at their distribution. The distribution of residuals is, as confirmed earlier by the model inspection plots, normal around 0°C:
 
 ```{r, fig.width=6, fig.height=4}
 resid <- meas_fit2$temp - meas_fit2$pred
@@ -343,7 +341,7 @@ ggplot(data.frame(resid = resid), aes(resid, after_stat(density))) +
          y = "Density")
 ```
 
-We want to investigate the yearly rate of "unusual" day temperatures, i.e. on how many days the temperature was either much lower or much higher than the typical temperature for that season predicted by our model `m2`. Choosing a threshold for this can be quite arbitrary. We will at least base the threshold on the given historical data, by using the 90th-percentile of the absolute residuals as threshold:
+We want to investigate the annual rate of "unusual" day temperatures, i.e. on how many days the temperature was either much lower or much higher than the typical temperature for that season predicted by our model `m2`. Choosing a threshold for this can be quite arbitrary. We will at least base the threshold on the given historical data, by using the 90th-percentile of the absolute residuals as threshold:
 
 ```{r}
 quantile(abs(resid), 0.9)
@@ -406,7 +404,7 @@ filter(resid_stats_plt, measure %in% c("prop_days_warmer", "prop_days_colder")) 
              y = "")
 ```
 
-1958, 2017 and 2023 had the least number of days with unusually low or high temperatures and 1985, 2010 and 2013 had the most. Again, please keep in mind, that our model `m2` already takes into account the yearly temperature increase caused by global warming, so "unusual" refers only to the seasonal trend.
+1958, 2017 and 2023 had the least number of days with unusually low or high temperatures and 1985, 2010 and 2013 had the most. Again, please keep in mind, that our model `m2` already takes into account the annual temperature increase caused by global warming, so "unusual" refers only to the seasonal trend.
 
 ```{r}
 select(resid_stats, year, prop_days_warmer, prop_days_colder) |>
@@ -417,7 +415,7 @@ select(resid_stats, year, prop_days_warmer, prop_days_colder) |>
     select(rank, year, prop_days_unusual, everything())
 ```
 
-We identify the years with the least and most deviation using the the mean absolute deviation measure. By this measure, 2017 is the "most ideal year", i.e. the year following closest the seasonal trend. This is also reflected by a small proportion of unusual day temperatures (ranking first in a tie with year 1958 in the above table). In contrast, 1985 is the year with the highest mean absolute deviation. It also has the highest proportion of unusual day temperatures, especially caused by a very cold winter. The following figure compares both years and highlights unusual temperatures:
+We identify the years with the least and most deviation using the the mean absolute deviation measure. By this measure, 2017 is the "most ideal year", i.e. the year following closest the seasonal trend. This is also reflected by a small proportion of unusual day temperatures (ranking second in the above table). In contrast, 1985 is the year with the highest mean absolute deviation. It also has the highest proportion of unusual day temperatures, especially caused by a very cold winter. The following figure compares both years and highlights unusual temperatures:
 
 ```{r, fig.width=10, fig.height=6}
 least_deviation_yr <- slice_min(resid_stats, mae) |> pull(year)
@@ -592,6 +590,4 @@ ggplot(least_most_plt) +
 
 ## Conclusion
 
-TODO
-
-- 2024 not complete
+We saw how we can model a periodic trend such as seasonal changes in day temperatures using a simple linear model. We could then analyze the deviations between the actual temperatures and the predictions of this model to identify years with low and high deviations, i.e. years with few and with many unusually cold or warm days. The results are quite different depending on whether or not we take into account the annual temperature increase due to global warming.
