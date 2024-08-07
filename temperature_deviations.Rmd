@@ -2,8 +2,7 @@
 title: "Day temperature deviations"
 author: "Markus Konrad"
 date: "`r Sys.Date()`"
-knit: (function(inputFile, encoding) {
-  rmarkdown::render(inputFile, encoding = encoding, output_dir = "docs") })
+knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_dir = "docs", output_file = "index.html") })
 output:
   bookdown::html_document2:
       number_sections: false
