@@ -1,5 +1,5 @@
 ---
-title: "The most ideal year"
+title: "Day temperature deviations"
 author: "Markus Konrad"
 date: "`r Sys.Date()`"
 output:
@@ -26,6 +26,7 @@ theme_set(theme_minimal())
 ## TODOs
 
 - write explanations
+- rename project to "day_temperature_deviations"
 - proof-read
 - update data
 - remove this section
@@ -45,7 +46,7 @@ head(raw_hist)
 ```
 
 ```{r}
-raw_pres <- read.delim('data/produkt_klima_tag_20230123_20240725_00403.txt', sep = ';')
+raw_pres <- read.delim('data/produkt_klima_tag_20230203_20240805_00403.txt', sep = ';')
 head(raw_pres)
 ```
 
@@ -402,7 +403,7 @@ select(resid_stats, year, mae) |>
 
 ```{r, fig.width=10, fig.height=6}
 filter(resid_stats_plt, measure %in% c("prop_days_warmer", "prop_days_colder")) |>
-    mutate(measure = case_match(measure, "prop_days_warmer" ~ "Warmer", "prop_days_colder" ~ "Colder")) |>
+    mutate(measure = case_match(measure, "prop_days_warmer" ~ "Unusually warm", "prop_days_colder" ~ "Unusually cold")) |>
     ggplot(aes(x = year, y = value, fill = measure)) +
         geom_col(position = position_stack()) +
         scale_fill_discrete(limits = rev, name = "") +
@@ -461,7 +462,7 @@ ggplot(least_most_plt, aes(day, resid, color = label, alpha = transparency)) +
 
 ## Global warming
 
-In our previous model `m2` we included the yearly increasing temperatures due to global warming. This means, we expected higher temperatures in recent years and so they are not "unusual." But what happens if we don't account for global warming? For this, we train the model only with data from the first ten years, i.e. 1950 to 1959^[We can assume that global warming already had an effect back then, but we don't have data from earlier.], and don't include the `year` term:
+In our previous model `m2` we included the yearly increasing temperatures due to global warming. This means, we expected higher temperatures in recent years and so they are not "unusual." But what happens if we don't account for global warming? For this, we train the model only with data from the first ten years, i.e. 1950 to 1959^[We can assume that global warming already had an effect in the 1950s, but we don't have data from earlier.], and don't include the `year` term:
 
 ```{r}
 # fit the model
@@ -523,7 +524,7 @@ filter(resid_stats_plt, measure %in% c("mae", "me")) |>
              y = "Temperature in °C")
 ```
 
-Which years feature the most deviation now with this model? As we can see, the three hottest years all occurred recently:
+Which years feature the most deviation now with this model? As we can see, the years with the highest positive deviations all occurred recently:
 
 ```{r}
 select(resid_stats, year, me) |>
@@ -545,7 +546,7 @@ Since the beginning of the millennium, we can see a high proportion of unusually
 
 ```{r, fig.width=10, fig.height=6}
 filter(resid_stats_plt, measure %in% c("prop_days_warmer", "prop_days_colder")) |>
-    mutate(measure = case_match(measure, "prop_days_warmer" ~ "Warmer", "prop_days_colder" ~ "Colder")) |>
+    mutate(measure = case_match(measure, "prop_days_warmer" ~ "Unusually warm", "prop_days_colder" ~ "Unusually cold")) |>
     ggplot(aes(x = year, y = value, fill = measure)) +
         geom_col(position = position_stack()) +
         scale_fill_discrete(limits = rev, name = "") +
@@ -565,7 +566,7 @@ select(resid_stats, year, prop_days_warmer, prop_days_colder) |>
     select(rank, year, prop_days_unusual, everything())
 ```
 
-When we sort by proportion of unusually warm day temperatures, we see the expected picture of a top five list consisting purely of recent years:
+When we sort by proportion of unusually warm day temperatures, the top five list includes only recent years. This year so far every fourth day is unusually warm, when using the 1950s as reference:
 
 ```{r}
 select(resid_stats, year, prop_days_warmer) |>
@@ -573,6 +574,7 @@ select(resid_stats, year, prop_days_warmer) |>
     head(5)
 ```
 
+We can again plot the year with the least (1958) and most (2024) deviation from the expected day temperatures:
 
 ```{r, fig.width=10, fig.height=6}
 least_deviation_yr <- slice_min(resid_stats, mae) |> pull(year)
