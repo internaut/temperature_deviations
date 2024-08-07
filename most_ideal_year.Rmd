@@ -46,14 +46,19 @@ head(raw_hist)
 ```
 
 ```{r}
-raw_pres <- read.delim('data/produkt_klima_tag_20230203_20240805_00403.txt', sep = ';')
-head(raw_pres)
+raw_pres1 <- read.delim('data/produkt_klima_tag_20221107_20240509_00403.txt', sep = ';')
+head(raw_pres1)
+```
+
+```{r}
+raw_pres2 <- read.delim('data/produkt_klima_tag_20230203_20240805_00403.txt', sep = ';')
+head(raw_pres2)
 ```
 
 After reading in the files, we merge them, select only the necessary variables, transform the dates and remove duplicates (since the historical and the present data both contain observations from 2022) to generate our final measurements dataset `meas`:
 
 ```{r}
-meas <- bind_rows(raw_hist, raw_pres) |>
+meas <- bind_rows(raw_hist, raw_pres1, raw_pres2) |>
     select(date = MESS_DATUM, temp = TMK) |>   # TMK is day-time average temperature in °C
     mutate(date = as.POSIXct(strptime(date, "%Y%m%d")),
            year = as.integer(as.numeric(format(date, "%Y"))),
@@ -88,17 +93,6 @@ filter(meas, year >= 2018) |>
              x = "",
              y = "Temperature in °C")
 ```
-<!--
-```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=6}
-filter(meas, year == 2023) |>
-    ggplot(aes(date, temp)) +
-        geom_line(method = "loess") +
-        geom_smooth() +
-        labs(title = "Daily day-time average temperature in Berlin-Dahlem in 2023",
-             x = "",
-             y = "Temperature in °C")
-```
--->
 
 We can also plot the yearly trend by plotting the temperature against the day of the year. We can see the typical seasonal pattern but also the slight overall increase in temperature over the years, since more recent years (yellow color) tend to have higher temperatures, especially in the winter.
 
