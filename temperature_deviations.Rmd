@@ -28,6 +28,8 @@ theme_set(theme_minimal())
 
 Contemplating about the weather, I wondered if I could find out the "most unusual" and "most ideal" years regarding air temperature in Germany, i.e. if I could identify the years in which the daily temperature deviated the most and the least from the expected seasonal temperature. So I decided to look into historical climate data, created an extremely simplified seasonal temperature model and then investigated the deviations from that model. Although it's all quite simple, this little exploration gives some insights into how and why we can use a linear model for such data.
 
+You can find the [source code repository for this project on GitHub](https://github.com/internaut/temperature_deviations). The code is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [LICENSE](https://github.com/internaut/temperature_deviations/blob/master/LICENSE) file.
+
 ## Data
 
 I retrieved the [historical climate data](https://www.dwd.de/DE/leistungen/klimadatendeutschland/klarchivtagmonat.html) for a weather station in Berlin-Dahlem (a bit outside the city) from 1950 to now from the [German Meteorological Service (Deutscher Wetterdienst – DWD)](https://www.dwd.de/). The data come as delimited files with semicolon as column separator. Historical data until 2022 and present data from 2022 to now come as separate files.
