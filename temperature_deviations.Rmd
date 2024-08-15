@@ -26,6 +26,10 @@ theme_set(theme_minimal())
 
 ## Introduction
 
+```{r, echo=FALSE, fig.align='center', out.width='600px'}
+knitr::include_graphics("docs/front.png")
+```
+
 Contemplating about the weather, I wondered if I could find out the "most unusual" and "most ideal" years regarding air temperature in Germany, i.e. if I could identify the years in which the daily temperature deviated the most and the least from the expected seasonal temperature. So I decided to look into historical climate data, created an extremely simplified seasonal temperature model and then investigated the deviations from that model. Although it's all quite simple, this little exploration gives some insights into how and why we can use a linear model for such data.
 
 You can find the [source code repository for this project on GitHub](https://github.com/internaut/temperature_deviations). The code is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [LICENSE](https://github.com/internaut/temperature_deviations/blob/master/LICENSE) file.
@@ -280,6 +284,11 @@ filter(meas_fit2, year >= 2018) |>
              y = "Temperature in °C") +
         theme(plot.subtitle = element_markdown())
 ```
+
+```{r, echo=FALSE}
+ggsave("docs/front.png", width = 8, height = 4)
+```
+
 
 And we also check it for the full time range. Here, we also see the linear increase in average temperature introduced in the updated model:
 
